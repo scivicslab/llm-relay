@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>com.scivicslab</groupId>
+    <artifactId>llm-relay-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+  <artifactId>llm-relay-proxy</artifactId>
+  <name>llm-relay-proxy</name>
+  <description>A reverse proxy for a live request on vertx-http-proxy, with interceptors that carry each consumer's rules.</description>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.scivicslab</groupId>
+      <artifactId>llm-relay-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-core</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-web</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-http-proxy</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <!-- ProxyHandler: vertx-http-proxy's HttpProxy as a handler on a vertx-web Router -->
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-web-proxy</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>
