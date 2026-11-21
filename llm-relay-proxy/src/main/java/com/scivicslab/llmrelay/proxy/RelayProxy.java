@@ -1,6 +1,7 @@
 package com.scivicslab.llmrelay.proxy;
 
 import com.scivicslab.llmrelay.RelayOptions;
+import io.vertx.core.Context;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
@@ -19,8 +20,8 @@ import java.util.List;
  * A reverse proxy for a live request to one upstream LLM server, on vertx-http-proxy (quarkus-chat-ui's
  * tasks/todo.md, step 4a). The request and the answer stream through as they arrive, both shapes alike
  * ({@code /v1/chat/completions} and {@code /v1/messages}): the proxy parses no body. The upstream client is the one
- * {@link RelayOptions} describes (HTTP/1.1, timeouts). Interceptors run in order before the request goes upstream; the
- * first refusal answers the client instead. An upstream that cannot be reached is answered with 502 by vertx-http-proxy.
+ * {@link RelayOptions} describes (HTTP/1.1, timeouts). Interceptors run in order before the request goes upstream, each
+ * answering when it is ready; the first refusal answers the client instead. An upstream that cannot be reached is answered with 502 by vertx-http-proxy.
  */
 public final class RelayProxy {
 
@@ -38,19 +39,22 @@ public final class RelayProxy {
         proxy.addInterceptor(new ProxyInterceptor() {
             @Override
             public Future<ProxyResponse> handleProxyRequest(ProxyContext context) {
-                ProxyRequest request = context.request();
-                for (RelayInterceptor rule : rules) {
-                    RelayInterceptor.Refusal refusal = rule.intercept(request);
-                    if (refusal != null) {
-                        request.release();
-                        ProxyResponse answer = request.response().setStatusCode(refusal.status());
-                        if (refusal.contentType() != null) answer.putHeader("Content-Type", refusal.contentType());
-                        answer.setBody(Body.body(Buffer.buffer(refusal.body() == null ? "" : refusal.body())));
-                        return Future.succeededFuture(answer);
-                    }
-                }
-                return context.sendRequest();
+                return next(context, rules, 0, Vertx.currentContext());
             }
+        });
+    }
+
+    /** Runs rule {@code i}, then the next, in the request's Vert.x context; the first refusal answers the client. */
+    private static Future<ProxyResponse> next(ProxyContext context, List<RelayInterceptor> rules, int i, Context vertxContext) {
+        if (i == rules.size()) return context.sendRequest();
+        ProxyRequest request = context.request();
+        return Future.fromCompletionStage(rules.get(i).intercept(request), vertxContext).compose(refusal -> {
+            if (refusal == null) return next(context, rules, i + 1, vertxContext);
+            request.release();
+            ProxyResponse answer = request.response().setStatusCode(refusal.status());
+            if (refusal.contentType() != null) answer.putHeader("Content-Type", refusal.contentType());
+            answer.setBody(Body.body(Buffer.buffer(refusal.body() == null ? "" : refusal.body())));
+            return Future.succeededFuture(answer);
         });
     }
 

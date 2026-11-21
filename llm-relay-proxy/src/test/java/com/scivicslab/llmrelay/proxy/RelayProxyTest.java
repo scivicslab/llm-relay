@@ -84,8 +84,8 @@ class RelayProxyTest {
             seen.put("called", "yes");
             req.response().end("should not be reached");
         });
-        String base = front(port, List.of(request -> new RelayInterceptor.Refusal(401, "application/json",
-                "{\"error\":\"the request does not carry this scope's key\"}")));
+        String base = front(port, List.of(request -> CompletableFuture.completedFuture(new RelayInterceptor.Refusal(401,
+                "application/json", "{\"error\":\"the request does not carry this scope's key\"}"))));
         HttpResponse<InputStream> r = post(base + "/llm/s1/v1/chat/completions", Map.of(), "{}");
         assertEquals(401, r.statusCode());
         assertEquals("{\"error\":\"the request does not carry this scope's key\"}",
@@ -103,7 +103,7 @@ class RelayProxyTest {
         String base = front(port, List.of(request -> {
             request.setURI(request.getURI().substring("/llm/s1".length()));
             request.headers().set("Authorization", "Bearer dummy-real-key");
-            return null;
+            return CompletableFuture.completedFuture(null);
         }));
         HttpResponse<InputStream> r = post(base + "/llm/s1/v1/chat/completions?x=1",
                 Map.of("Authorization", "Bearer dummy-throw-away-key"), "{}");
@@ -145,7 +145,7 @@ class RelayProxyTest {
         });
         String base = front(port, List.of(request -> {
             request.setURI(request.getURI().substring("/llm/s1".length()));
-            return null;
+            return CompletableFuture.completedFuture(null);
         }));
         HttpResponse<InputStream> r = post(base + path, Map.of(), "{\"stream\":true}");
         assertEquals(200, r.statusCode());
@@ -161,13 +161,42 @@ class RelayProxyTest {
         assertEquals(path.substring("/llm/s1".length()), seen.get("path"));
     }
 
+    /**
+     * An interceptor may answer later, from another thread (agent-connector-kernel asks a POJO-actor actor for its
+     * keys): the event loop is not blocked, and the request goes on once the answer comes. Interceptors run in order.
+     */
+    @Test
+    void anInterceptorMayAnswerLaterFromAnotherThreadAndTheyRunInOrder() throws Exception {
+        int port = upstream(req -> {
+            seen.put("marks", String.valueOf(req.getHeader("X-Marks")));
+            req.response().end("ok");
+        });
+        String base = front(port, List.of(
+                request -> CompletableFuture.supplyAsync(() -> {
+                    try {
+                        Thread.sleep(200);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                    request.headers().set("X-Marks", "first");
+                    return null;
+                }),
+                request -> {
+                    request.headers().set("X-Marks", request.headers().get("X-Marks") + ",second");
+                    return CompletableFuture.completedFuture(null);
+                }));
+        HttpResponse<InputStream> r = post(base + "/llm/s1/v1/chat/completions", Map.of(), "{}");
+        assertEquals(200, r.statusCode());
+        assertEquals("first,second", seen.get("marks"));
+    }
+
     @Test
     void anUpstreamThatIsDownIsAnsweredWith502() throws Exception {
         int free;
         try (ServerSocket s = new ServerSocket(0)) {
             free = s.getLocalPort();
         }
-        String base = front(free, List.of(request -> null));
+        String base = front(free, List.of(request -> CompletableFuture.completedFuture(null)));
         HttpResponse<InputStream> r = post(base + "/llm/s1/v1/chat/completions", Map.of(), "{}");
         assertEquals(502, r.statusCode());
     }

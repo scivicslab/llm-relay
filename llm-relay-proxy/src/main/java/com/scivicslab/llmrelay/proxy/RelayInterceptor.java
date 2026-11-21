@@ -2,6 +2,8 @@ package com.scivicslab.llmrelay.proxy;
 
 import io.vertx.httpproxy.ProxyRequest;
 
+import java.util.concurrent.CompletionStage;
+
 /**
  * One consumer's rule for a proxied request, run before the request goes upstream (quarkus-chat-ui's tasks/todo.md,
  * step 4a). It may rewrite the request -- its URI ({@link ProxyRequest#setURI}) and headers
@@ -21,6 +23,11 @@ public interface RelayInterceptor {
     record Refusal(int status, String contentType, String body) {
     }
 
-    /** @return {@code null} to let the request go on, possibly rewritten; or a refusal */
-    Refusal intercept(ProxyRequest request);
+    /**
+     * May answer later, from any thread (a consumer may ask an actor): the proxy waits without blocking the event loop
+     * and goes on in the request's own Vert.x context.
+     *
+     * @return a stage that completes with {@code null} to let the request go on, possibly rewritten, or with a refusal
+     */
+    CompletionStage<Refusal> intercept(ProxyRequest request);
 }
