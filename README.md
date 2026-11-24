@@ -13,7 +13,7 @@ Vert.x is a `provided` dependency: the application brings its own (in Quarkus, t
 
 ## Build
 
-Java 21 or later and Maven:
+Java 25 and Maven:
 
 ```
 mvn install
